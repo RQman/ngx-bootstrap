@@ -6,7 +6,7 @@ import { BsDatepickerModule } from './bs-datepicker.module';
 import { BsDatepickerDirective } from './bs-datepicker.component';
 import { BsDatepickerConfig } from './bs-datepicker.config';
 import { BsDatepickerContainerComponent } from './themes/bs/bs-datepicker-container.component';
-import { CalendarCellViewModel, WeekViewModel } from './models';
+import { BsDatepickerViewMode, CalendarCellViewModel, WeekViewModel } from './models';
 import { dispatchKeyboardEvent, queryAll } from '@netbasal/spectator';
 import { registerEscClick } from '../utils';
 
@@ -26,9 +26,7 @@ class TestComponent {
 type TestFixture = ComponentFixture<TestComponent>;
 
 function getDatepickerDirective(fixture: TestFixture): BsDatepickerDirective {
-  const datepicker: BsDatepickerDirective = fixture.componentInstance.datepicker;
-
-  return datepicker;
+  return fixture.componentInstance.datepicker;
 }
 
 function showDatepicker(fixture: TestFixture): BsDatepickerDirective {
@@ -110,7 +108,9 @@ describe('datepicker:', () => {
     datepickerContainerInstance[`_store`]
       .select(state => state.view)
       .subscribe(view => {
-        expect(view.date.getDate()).not.toEqual((weekSelection.days[0].date.getDate()));
+        const currentDate = `${view.date.getDate()}${view.date.getFullYear()}` ;
+        const oldDate = `${weekSelection.days[0].date.getDate()}${weekSelection.days[0].date.getFullYear()}`;
+        expect(currentDate).not.toEqual(oldDate);
       });
   });
 
@@ -139,6 +139,88 @@ describe('datepicker:', () => {
     expect(buttonText.filter(button => button === 'Today').length).toEqual(1);
   });
 
+  it('should show custom label for today button if set in config', () => {
+    const todayBtnCustomLbl = 'Select today';
+    const datepickerDirective = getDatepickerDirective(fixture);
+    datepickerDirective.bsConfig = {
+      todayButtonLabel: todayBtnCustomLbl,
+      showTodayButton: true
+    };
+    showDatepicker(fixture);
+
+    const buttonText: string[] = [];
+    queryAll('button').forEach(button => {
+      buttonText.push(button.textContent);
+    });
+    expect(buttonText.filter(button => button === todayBtnCustomLbl).length).toEqual(1);
+  });
+
+  it('should show custom label for clear button if set in config', () => {
+    const clearBtnCustomLbl = 'Clear current';
+    const datepickerDirective = getDatepickerDirective(fixture);
+    datepickerDirective.bsConfig = {
+      clearButtonLabel: clearBtnCustomLbl,
+      showClearButton: true
+    };
+    showDatepicker(fixture);
+
+    const buttonText: string[] = [];
+    queryAll('button').forEach(button => {
+      buttonText.push(button.textContent);
+    });
+    expect(buttonText.filter(button => button === clearBtnCustomLbl).length).toEqual(1);
+  });
+
+  describe('should start with', () => {
+
+    const parameters = [
+      {
+        description: 'year view if set in config',
+        startView: 'year',
+        expectedVisibleContainer: ['bs-years-calendar-view'],
+        expectedInvisibleContainer: ['bs-month-calendar-view', 'bs-days-calendar-view'],
+        expectedViewMode: 'year'
+      },
+      {
+        description: 'month view if set in config',
+        startView: 'month',
+        expectedVisibleContainer: ['bs-month-calendar-view'],
+        expectedInvisibleContainer: ['bs-years-calendar-view', 'bs-days-calendar-view'],
+        expectedViewMode: 'month'
+      },
+      {
+        description: 'day view if set in config',
+        startView: 'day',
+        expectedVisibleContainer: ['bs-days-calendar-view'],
+        expectedInvisibleContainer: ['bs-years-calendar-view', 'bs-month-calendar-view'],
+        expectedViewMode: 'day'
+      }
+    ];
+
+    parameters.forEach(parameter => {
+      it(parameter.description, done => {
+        const datepickerDirective = getDatepickerDirective(fixture);
+        datepickerDirective.bsConfig = {
+          startView: parameter.startView as BsDatepickerViewMode
+        };
+
+        const bsDatepickerDirective = showDatepicker(fixture);
+        const datepickerContainerInstance = getDatepickerContainer(bsDatepickerDirective);
+
+        parameter.expectedVisibleContainer.forEach(container => {
+          expect(datepickerContainerInstance[`_element`].nativeElement.querySelectorAll(container)[0]).toBeTruthy();
+        });
+        parameter.expectedInvisibleContainer.forEach(container => {
+          expect(datepickerContainerInstance[`_element`].nativeElement.querySelectorAll(container)[0]).toBeFalsy();
+        });
+        datepickerContainerInstance.viewMode.subscribe(res => {
+          expect(res).toBe(parameter.expectedViewMode);
+          done();
+        });
+      });
+    });
+  });
+
   it('should set today date', () => {
     const datepicker = showDatepicker(fixture);
     const datepickerContainerInstance = getDatepickerContainer(datepicker);
@@ -153,7 +235,9 @@ describe('datepicker:', () => {
     datepickerContainerInstance[`_store`]
       .select(state => state.view)
       .subscribe(view => {
-        expect(view.date.getDay()).not.toEqual((new Date().getDay()), 'should start out not equal to today');
+        expect(`${(view.date.getDate())}-${(view.date.getMonth())}-${(view.date.getFullYear())}`)
+          .not.toEqual(`${(new Date().getDate())}-${(new Date().getMonth())}-${(new Date().getFullYear())}`,
+          'should start out not equal to today');
       }).unsubscribe();
 
     datepickerContainerInstance.setToday();
@@ -162,7 +246,21 @@ describe('datepicker:', () => {
     datepickerContainerInstance[`_store`]
       .select(state => state.view)
       .subscribe(view => {
-        expect(view.date.getDay()).toEqual((new Date().getDay()), 'should update to equal today');
+        expect(`${(view.date.getDate())}-${(view.date.getMonth())}-${(view.date.getFullYear())}`)
+          .toEqual(`${(new Date().getDate())}-${(new Date().getMonth())}-${(new Date().getFullYear())}`,
+          'should update to equal today');
       }).unsubscribe();
   });
+
+  it('should clear date', () => {
+    const datepicker = showDatepicker(fixture);
+    const datepickerContainerInstance = getDatepickerContainer(datepicker);
+    datepickerContainerInstance.clearDate();
+    fixture.detectChanges();
+    datepickerContainerInstance[`_store`]
+      .select(state => state.selectedDate)
+      .subscribe(date => {
+        expect(date).toBe(undefined);
+      }).unsubscribe();
+    });
 });
